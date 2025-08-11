@@ -1,11 +1,10 @@
-const chargebee = require('chargebee');
+import Chargebee from 'chargebee';
 import { ServerError } from '../error';
 import logger from './logger';
 
-
-chargebee.configure({
+const chargebee = new Chargebee({
   site: process.env.CHARGEBEE_SITE ?? '',
-  api_key: process.env.CHARGEBEE_API_KEY ?? ''
+  apiKey: process.env.CHARGEBEE_API_KEY ?? '',
 });
 
 export const createChargebeeInvoiceForTopup = async (params: {
@@ -43,20 +42,12 @@ export const createChargebeeInvoiceForTopup = async (params: {
       }
     }
 
-    const result = await chargebee.invoice
-      .create_for_charge_items_and_charges(invoiceParams)
-      .request();
+    const result = await chargebee.invoice.create(invoiceParams);
 
-    logger.info('Chargebee invoice created for topup', {
-      customerId: params.customerId,
-      invoiceId: result.invoice.id,
-      amountCents: params.amountCents,
-      status: result.invoice.status,
-    });
+    logger.info('Chargebee invoice created for topup', result);
 
     return {
       invoice: result.invoice,
-      transaction: result.transaction,
     };
   } catch (error: any) {
     logger.error('Failed to create Chargebee invoice for topup', {
@@ -70,9 +61,9 @@ export const createChargebeeInvoiceForTopup = async (params: {
 
 export const createChargebeeCustomer = async (userDetails: {
   email: string;
-  firstName?: string;
-  lastName?: string;
-  phoneNumber?: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
 }) => {
   try {
     const result = await chargebee.customer.create({
@@ -80,7 +71,7 @@ export const createChargebeeCustomer = async (userDetails: {
       first_name: userDetails.firstName,
       last_name: userDetails.lastName,
       phone: userDetails.phoneNumber,
-      auto_collection: 'on'
+      auto_collection: 'on',
     });
 
     logger.info('Chargebee customer created');
@@ -94,18 +85,18 @@ export const createChargebeeCustomer = async (userDetails: {
 
 export const createChargebeeVirtualBankAccount = async (customerId: string, email: string) => {
   try {
-    const result = await chargebee.virtual_bank_account.create({
+    const result = await chargebee.virtualBankAccount.create({
       customer_id: customerId,
       email: email,
-      scheme: 'ach_credit'
-    }).request();
+      scheme: 'ach_credit',
+    });
 
     logger.info('Chargebee virtual bank account created', {
       customerId,
       vbaId: result.virtual_bank_account.id,
       accountNumber: result.virtual_bank_account.account_number,
       routingNumber: result.virtual_bank_account.routing_number,
-      bankName: result.virtual_bank_account.bank_name
+      bankName: result.virtual_bank_account.bank_name,
     });
 
     return result.virtual_bank_account;
@@ -113,7 +104,7 @@ export const createChargebeeVirtualBankAccount = async (customerId: string, emai
     logger.error('Failed to create Chargebee virtual bank account', {
       error: error.message,
       customerId,
-      email
+      email,
     });
     throw new ServerError(`Chargebee virtual bank account creation failed: ${error.message}`);
   }
