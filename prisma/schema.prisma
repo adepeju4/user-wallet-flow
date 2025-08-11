@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  phoneNumber  String?  @map("phone_number")
+  passwordHash String?  @map("password_hash")
+  publicHandle String?  @unique @map("public_handle") //unique handle for p2p transfers
+  cbCustomerId String?  @unique @map("cb_customer_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  wallet         Wallet?
+  paymentSources PaymentSource[]
+  invoices       Invoice[]
+  subscriptions  Subscription[]
+
+  @@map("users")
+}
+
+model Wallet {
+  id           String @id @default(uuid()) @db.Uuid
+  userId       String @unique @map("user_id") @db.Uuid
+  balanceCents BigInt @default(0) @map("balance_cents")
+  status       String @default("active")
+  currency     String @default("USD")
+
+  user          User          @relation(fields: [userId], references: [id])
+  transactions  Transaction[]
+  ledgerEntries LedgerEntry[]
+
+  // for virtual account integration
+  accountNumber String?  @map("account_number")
+  routingNumber String?  @map("routing_number")
+  bankName      String?  @map("bank_name")
+  bankAddress   String?  @map("bank_address")
+  bankCountry   String?  @map("bank_country")
+  bankCurrency  String?  @map("bank_currency")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("wallets")
+}
+
+model PaymentSource {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  provider    String
+  type        String
+  externalId  String  @map("external_id")
+  displayName String? @map("display_name")
+  isDefault   Boolean @default(false) @map("is_default")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, externalId])
+  @@map("payment_sources")
+}
+
+model Invoice {
+  id               String        @id @default(uuid()) @db.Uuid
+  userId           String        @map("user_id") @db.Uuid
+  cbInvoiceId      String        @unique @map("cb_invoice_id")
+  cbSubscriptionId String?       @map("cb_subscription_id")
+  status           InvoiceStatus
+  recurring        Boolean       @default(false)
+  description      String?
+  dueAt            DateTime?     @map("due_at") @db.Timestamptz
+  cbInvoiceUrl     String?       @map("cb_invoice_url")
+  cbInvoicePdfUrl  String?       @map("cb_invoice_pdf_url")
+  cbInvoiceNumber  String?       @map("cb_invoice_number")
+  amountCents      BigInt        @map("amount_cents")
+  taxCents         BigInt        @default(0) @map("tax_cents")
+  totalCents       BigInt        @map("total_cents")
+  paidCents        BigInt        @default(0) @map("paid_cents")
+  currency         String        @default("USD")
+  dueDate          DateTime?     @map("due_date") @db.Timestamptz
+  paidAt           DateTime?     @map("paid_at") @db.Timestamptz
+  cbIdempotencyKey String?       @unique @map("cb_idempotency_key") // Chargebee's idempotency key for webhook deduplication
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  user         User          @relation(fields: [userId], references: [id])
+  subscription Subscription? @relation(fields: [cbSubscriptionId], references: [cbSubscriptionId])
+
+  @@index([userId, createdAt])
+  @@index([cbSubscriptionId])
+  @@map("invoices")
+}
+
+model Subscription {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  cbSubscriptionId  String             @unique @map("cb_subscription_id")
+  cbPlanId          String             @map("cb_plan_id")
+  status            SubscriptionStatus
+  billingPeriod     Int?               @map("billing_period")
+  billingPeriodUnit String?            @map("billing_period_unit")
+  currentTermStart  DateTime           @map("current_term_start") @db.Timestamptz
+  currentTermEnd    DateTime           @map("current_term_end") @db.Timestamptz
+  nextBillingAt     DateTime?          @map("next_billing_at") @db.Timestamptz
+  cancelledAt       DateTime?          @map("cancelled_at") @db.Timestamptz
+  trialStart        DateTime?          @map("trial_start") @db.Timestamptz
+  trialEnd          DateTime?          @map("trial_end") @db.Timestamptz
+  activatedAt       DateTime?          @map("activated_at") @db.Timestamptz
+  mrr               BigInt?            @map("mrr") // Monthly Recurring Revenue in cents
+  currency          String             @default("USD")
+  cbIdempotencyKey  String?            @unique @map("cb_idempotency_key") // Chargebee's idempotency key for webhook deduplication
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  user     User      @relation(fields: [userId], references: [id])
+  invoices Invoice[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([currentTermEnd])
+  @@map("subscriptions")
+}
+
+model Transaction {
+  id               String    @id @default(uuid()) @db.Uuid
+  walletId         String    @map("wallet_id") @db.Uuid
+  type             TxnType
+  status           TxnStatus @default(PENDING)
+  amountCents      BigInt    @map("amount_cents")
+  externalProvider String?   @map("external_provider")
+  externalRef      String?   @map("external_ref")
+  idempotencyKey   String?   @unique @map("idempotency_key")
+  clientRef        String?   @map("client_ref")
+  reversalOf       String?   @map("reversal_of") @db.Uuid
+  memo             String?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  wallet        Wallet        @relation(fields: [walletId], references: [id])
+  reversalOfTxn Transaction?  @relation("TransactionReversal", fields: [reversalOf], references: [id])
+  reversals     Transaction[] @relation("TransactionReversal")
+  ledgerEntries LedgerEntry[]
+
+  @@index([walletId, createdAt])
+  @@index([externalProvider, externalRef])
+  @@map("transactions")
+}
+
+model LedgerEntry {
+  id                String     @id @default(uuid()) @db.Uuid
+  txnId             String     @map("txn_id") @db.Uuid
+  walletId          String?    @map("wallet_id") @db.Uuid
+  account           String
+  side              LedgerSide
+  amountCents       BigInt     @map("amount_cents")
+  balanceAfterCents BigInt?    @map("balance_after_cents")
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  transaction Transaction @relation(fields: [txnId], references: [id])
+  wallet      Wallet?     @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt])
+  @@map("ledger_entries")
+}
+
+model ReconciliationRun {
+  id                 String   @id @default(uuid()) @db.Uuid
+  asOfDate           DateTime @map("as_of_date") @db.Date
+  provider           String
+  providerTotalCents BigInt   @map("provider_total_cents")
+  ledgerTotalCents   BigInt   @map("ledger_total_cents")
+  diffCents          BigInt   @map("diff_cents")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("reconciliation_runs")
+}
+
+enum TxnType {
+  TOPUP        @map("topup")
+  CHARGE       @map("charge")
+  REFUND       @map("refund")
+  WITHDRAW     @map("withdraw")
+  TRANSFER_IN  @map("transfer_in")
+  TRANSFER_OUT @map("transfer_out")
+
+  @@map("txn_type")
+}
+
+enum TxnStatus {
+  PENDING   @map("pending")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+  REVERSED  @map("reversed")
+  CANCELLED @map("cancelled")
+
+  @@map("txn_status")
+}
+
+enum LedgerSide {
+  DEBIT  @map("debit")
+  CREDIT @map("credit")
+
+  @@map("ledger_side")
+}
+
+enum InvoiceStatus {
+  PENDING     @map("pending")
+  POSTED      @map("posted")
+  PAYMENT_DUE @map("payment_due")
+  PAID        @map("paid")
+  NOT_PAID    @map("not_paid")
+  VOIDED      @map("voided")
+
+  @@map("invoice_status")
+}
+
+enum SubscriptionStatus {
+  FUTURE       @map("future")
+  IN_TRIAL     @map("in_trial")
+  ACTIVE       @map("active")
+  NON_RENEWING @map("non_renewing")
+  PAUSED       @map("paused")
+  CANCELLED    @map("cancelled")
+
+  @@map("subscription_status")
+}
