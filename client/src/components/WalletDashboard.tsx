@@ -74,21 +74,27 @@ export default function WalletDashboard() {
     if (isNaN(numericAmount) || numericAmount <= 0) {
       return 'Please enter a valid amount';
     }
+
     if (numericAmount > walletBalanceInDollars) {
-      return `Insufficient funds. Available balance: ${
-        wallet.balanceFormatted
-      } (${walletBalanceInDollars.toFixed(2)})`;
+      return `Insufficient funds. Available balance: ${wallet.balanceFormatted}`;
     }
 
-    if (numericAmount < 0.01) {
-      return 'Minimum transfer amount is $0.01';
+    if (numericAmount < 1) {
+      return 'Minimum transfer amount is $1.00';
     }
 
+    // Convert user's dollar input to cents for precise validation
     const amountInCents = Math.round(numericAmount * 100);
-    if (amountInCents > Number(wallet.balanceCents)) {
-      return `Insufficient funds. Available: ${Number(
-        wallet.balanceCents
-      )} cents, Requested: ${amountInCents} cents`;
+    const walletBalanceInCents = Number(wallet.balanceCents);
+
+    // Double-check with cent precision to avoid floating point errors
+    if (amountInCents > walletBalanceInCents) {
+      return `Insufficient funds. Available balance: ${wallet.balanceFormatted}`;
+    }
+
+    // Ensure user input has max 2 decimal places (can't have more than cents precision)
+    if (Math.abs(amountInCents - numericAmount * 100) > 0.001) {
+      return 'Amount cannot have more than 2 decimal places';
     }
 
     return null;
@@ -109,14 +115,16 @@ export default function WalletDashboard() {
       return 'Maximum top-up amount is $10,000.00';
     }
 
+    // Ensure user input has max 2 decimal places (can't have more than cents precision)
     const amountInCents = Math.round(numericAmount * 100);
-    if (amountInCents !== numericAmount * 100) {
-      return 'Amount must not have more than 2 decimal places';
+    if (Math.abs(amountInCents - numericAmount * 100) > 0.001) {
+      return 'Amount cannot have more than 2 decimal places';
     }
 
     return null;
   };
 
+  // Simulate API call with proper error handling
   const simulateApiCall = async (
     operation: string,
     amount: number,
@@ -132,9 +140,7 @@ export default function WalletDashboard() {
     const walletBalanceInCents = Number(wallet.balanceCents);
 
     if (operation === 'transfer' && amountInCents > walletBalanceInCents) {
-      throw new Error(
-        `Insufficient funds. Required: ${amountInCents} cents, Available: ${walletBalanceInCents} cents`
-      );
+      throw new Error('Insufficient funds. Please check your balance and try again.');
     }
 
     return {
@@ -188,7 +194,7 @@ export default function WalletDashboard() {
       setWallet(prev => ({
         ...prev,
         balanceCents: newBalanceCents,
-        balanceFormatted: formatCurrency(Number(newBalanceCents) / 100),
+        balanceFormatted: formatCurrency(Number(newBalanceCents)),
       }));
 
       const newTransaction: TransactionWithFormatted = {
@@ -264,7 +270,7 @@ export default function WalletDashboard() {
       setWallet(prev => ({
         ...prev,
         balanceCents: newBalanceCents,
-        balanceFormatted: formatCurrency(Number(newBalanceCents) / 100),
+        balanceFormatted: formatCurrency(Number(newBalanceCents)),
       }));
 
       const newTransaction: TransactionWithFormatted = {
@@ -363,25 +369,15 @@ export default function WalletDashboard() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900">My Wallet</h1>
-          <p className="text-gray-600 mt-2">Manage your finances with real-time updates</p>
+          <p className="text-gray-600 mt-2">Manage your finances</p>
         </div>
 
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-gray-900">Current Balance</CardTitle>
-            <CardDescription className="flex items-center justify-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              Live Balance
-            </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <div className="text-4xl font-bold text-green-600 mb-2">{wallet.balanceFormatted}</div>
-            <div className="text-sm text-gray-500 mb-2">
-              Balance in cents: {Number(wallet.balanceCents).toLocaleString()} cents
-            </div>
-            <p className="text-sm text-gray-500 mt-1">
-              Last updated: {new Date().toLocaleString()}
-            </p>
           </CardContent>
         </Card>
 
@@ -465,14 +461,20 @@ export default function WalletDashboard() {
               <AlertMessage state={transferState} type="success" />
 
               <div>
-                <label className="block text-sm font-medium mb-2">Amount</label>
+                <label className="block text-sm font-medium mb-2">Amount (USD)</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="10.50"
+                  step="0.01"
+                  min="0.01"
                   value={transferAmount}
                   onChange={e => setTransferAmount(e.target.value)}
                   disabled={transferState.isLoading}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter amount in dollars (e.g., 10.50). We'll convert to cents internally for
+                  precise calculations.
+                </p>
               </div>
 
               <div>
@@ -525,15 +527,20 @@ export default function WalletDashboard() {
               <AlertMessage state={topupState} type="success" />
 
               <div>
-                <label className="block text-sm font-medium mb-2">Amount</label>
+                <label className="block text-sm font-medium mb-2">Amount (USD)</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="25.00"
+                  step="0.01"
+                  min="1.00"
+                  max="10000.00"
                   value={topupAmount}
                   onChange={e => setTopupAmount(e.target.value)}
                   disabled={topupState.isLoading}
                 />
-                <p className="text-sm text-gray-500 mt-1">Minimum: $1.00 | Maximum: $10,000.00</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Enter amount in dollars (e.g., 25.00). Minimum: $1.00 | Maximum: $10,000.00
+                </p>
               </div>
 
               <Button onClick={handleTopup} className="w-full" disabled={topupState.isLoading}>
