@@ -75,7 +75,6 @@ export const topUpWallet = async (req: AuthenticatedRequest, res: Response, next
       }
 
       const invoice = invoiceResult.invoice;
-      const cbTransaction = invoiceResult.transaction;
 
       const dbInvoice = await tx.invoice.create({
         data: {
@@ -83,7 +82,7 @@ export const topUpWallet = async (req: AuthenticatedRequest, res: Response, next
           cbInvoiceId: invoice.id,
           status: invoice.status.toUpperCase() as any,
           recurring: invoice.recurring || false,
-          date: new Date(invoice.date * 1000),
+          date: new Date((invoice.date || Date.now() / 1000) * 1000),
           dueDate: invoice.due_date ? new Date(invoice.due_date * 1000) : null,
           subTotalCents: BigInt(invoice.sub_total || 0),
           taxCents: BigInt(invoice.tax || 0),
@@ -96,8 +95,8 @@ export const topUpWallet = async (req: AuthenticatedRequest, res: Response, next
           currency: invoice.currency_code || 'USD',
           exchangeRate: invoice.exchange_rate || 1.0,
           paidAt: invoice.paid_at ? new Date(invoice.paid_at * 1000) : null,
-          cbInvoiceUrl: invoice.invoice_url,
-          cbInvoicePdfUrl: invoice.invoice_pdf_url,
+          cbInvoiceUrl: null,
+          cbInvoicePdfUrl: null,
           firstInvoice: invoice.first_invoice || false,
           termFinalized: invoice.term_finalized !== false,
           priceType: invoice.price_type || 'tax_exclusive',
@@ -105,18 +104,7 @@ export const topUpWallet = async (req: AuthenticatedRequest, res: Response, next
         },
       });
 
-      if (topupData.saveCard && cbTransaction?.payment_source_id && !topupData.paymentSourceId) {
-        await tx.paymentSource.create({
-          data: {
-            userId: user.id,
-            provider: 'chargebee',
-            type: 'card',
-            externalId: cbTransaction.payment_source_id,
-            displayName: `Card ending in ${cbTransaction.masked_card_number?.slice(-4) || '****'}`,
-            isDefault: user.paymentSources.length === 0,
-          },
-        });
-      }
+      // Note: Payment source saving will be handled via webhook when payment is processed
 
       let transaction = null;
       let newBalance = user.wallet.balanceCents;
@@ -204,8 +192,7 @@ export const topUpWallet = async (req: AuthenticatedRequest, res: Response, next
           balanceCents: Number(newBalance),
           balanceFormatted: (Number(newBalance) / 100).toFixed(2),
         },
-        paymentSaved:
-          topupData.saveCard && cbTransaction?.payment_source_id && !topupData.paymentSourceId,
+        paymentSaved: false,
         invoiceStatus: invoice.status,
       };
     });
