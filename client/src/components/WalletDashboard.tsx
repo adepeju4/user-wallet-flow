@@ -83,16 +83,13 @@ export default function WalletDashboard() {
       return 'Minimum transfer amount is $1.00';
     }
 
-    // Convert user's dollar input to cents for precise validation
     const amountInCents = Math.round(numericAmount * 100);
     const walletBalanceInCents = Number(wallet.balanceCents);
 
-    // Double-check with cent precision to avoid floating point errors
     if (amountInCents > walletBalanceInCents) {
       return `Insufficient funds. Available balance: ${wallet.balanceFormatted}`;
     }
 
-    // Ensure user input has max 2 decimal places (can't have more than cents precision)
     if (Math.abs(amountInCents - numericAmount * 100) > 0.001) {
       return 'Amount cannot have more than 2 decimal places';
     }
@@ -115,7 +112,6 @@ export default function WalletDashboard() {
       return 'Maximum top-up amount is $10,000.00';
     }
 
-    // Ensure user input has max 2 decimal places (can't have more than cents precision)
     const amountInCents = Math.round(numericAmount * 100);
     if (Math.abs(amountInCents - numericAmount * 100) > 0.001) {
       return 'Amount cannot have more than 2 decimal places';
@@ -123,8 +119,6 @@ export default function WalletDashboard() {
 
     return null;
   };
-
-  // Simulate API call with proper error handling
   const simulateApiCall = async (
     operation: string,
     amount: number,
@@ -136,16 +130,15 @@ export default function WalletDashboard() {
       throw new Error('Network error: Unable to process transaction. Please try again.');
     }
 
-    const amountInCents = Math.round(amount * 100);
     const walletBalanceInCents = Number(wallet.balanceCents);
 
-    if (operation === 'transfer' && amountInCents > walletBalanceInCents) {
+    if (operation === 'transfer' && amount > walletBalanceInCents) {
       throw new Error('Insufficient funds. Please check your balance and try again.');
     }
 
     return {
       success: true,
-      message: `${operation} of ${formatCurrency(amount)} completed successfully`,
+      message: `${operation} of ${formatCurrency(amount * 100)} completed successfully`,
       data: {
         transactionId: `txn_${Date.now()}`,
         amount,
@@ -430,7 +423,7 @@ export default function WalletDashboard() {
                         }`}
                       >
                         {transaction.type === 'TRANSFER_OUT' ? '-' : '+'}
-                        {transaction.amountFormatted}
+                        {Number(transaction.amountCents).toLocaleString()} cents
                       </p>
                       <span
                         className={`inline-block px-2 py-1 rounded-full text-xs ${getStatusColor(
