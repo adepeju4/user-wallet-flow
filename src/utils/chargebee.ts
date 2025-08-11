@@ -8,6 +8,66 @@ chargebee.configure({
   api_key: process.env.CHARGEBEE_API_KEY ?? ''
 });
 
+export const createChargebeeInvoiceForTopup = async (params: {
+  customerId: string;
+  amountCents: number;
+  description?: string;
+  paymentSourceId?: string;
+  cardToken?: string;
+  saveCard?: boolean;
+}) => {
+  try {
+    const invoiceParams: any = {
+      customer_id: params.customerId,
+      currency_code: 'USD',
+      auto_collection: 'on',
+      charges: [
+        {
+          amount: params.amountCents,
+          description: params.description || 'Wallet topup',
+        },
+      ],
+    };
+
+    if (params.paymentSourceId) {
+      invoiceParams.payment_source_id = params.paymentSourceId;
+    }
+
+    if (params.cardToken) {
+      invoiceParams.card = {
+        token_id: params.cardToken,
+      };
+      if (params.saveCard) {
+        invoiceParams.retain_payment_source = true;
+        invoiceParams.replace_primary_payment_source = false;
+      }
+    }
+
+    const result = await chargebee.invoice
+      .create_for_charge_items_and_charges(invoiceParams)
+      .request();
+
+    logger.info('Chargebee invoice created for topup', {
+      customerId: params.customerId,
+      invoiceId: result.invoice.id,
+      amountCents: params.amountCents,
+      status: result.invoice.status,
+    });
+
+    return {
+      invoice: result.invoice,
+      transaction: result.transaction,
+    };
+  } catch (error: any) {
+    logger.error('Failed to create Chargebee invoice for topup', {
+      error: error.message,
+      customerId: params.customerId,
+      amountCents: params.amountCents,
+    });
+    throw new ServerError(`Chargebee invoice creation failed: ${error.message}`);
+  }
+};
+
 export const createChargebeeCustomer = async (userDetails: {
   email: string;
   firstName?: string;
