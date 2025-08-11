@@ -28,13 +28,14 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
     const saltRounds = 12;
       const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    const { customer } = await createChargebeeCustomer({
+    const customer = await createChargebeeCustomer({
       email,
       firstName,
       lastName,
       phoneNumber,
     });
 
+  
     const virtualBankAccount = await createChargebeeVirtualBankAccount(customer.id, email);
 
     const user = await prisma.user.create({
