@@ -197,7 +197,7 @@ export default function WalletDashboard() {
         type: 'TRANSFER_OUT',
         status: 'SUCCEEDED',
         amountCents: BigInt(amountInCents),
-        amountFormatted: formatCurrency(amount),
+        amountFormatted: formatCurrency(amountInCents),
         externalProvider: null,
         externalRef: null,
         idempotencyKey: null,
@@ -273,7 +273,7 @@ export default function WalletDashboard() {
         type: 'TOPUP',
         status: 'SUCCEEDED',
         amountCents: BigInt(amountInCents),
-        amountFormatted: formatCurrency(amount),
+        amountFormatted: formatCurrency(amountInCents),
         externalProvider: null,
         externalRef: null,
         idempotencyKey: null,
@@ -423,7 +423,7 @@ export default function WalletDashboard() {
                         }`}
                       >
                         {transaction.type === 'TRANSFER_OUT' ? '-' : '+'}
-                        {Number(transaction.amountCents).toLocaleString()} cents
+                        {transaction.amountFormatted}
                       </p>
                       <span
                         className={`inline-block px-2 py-1 rounded-full text-xs ${getStatusColor(
