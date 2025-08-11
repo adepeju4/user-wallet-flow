@@ -10,12 +10,12 @@ datasource db {
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
-  firstName    String?  @map("first_name")
-  lastName     String?  @map("last_name")
-  phoneNumber  String?  @map("phone_number")
-  passwordHash String?  @map("password_hash")
-  publicHandle String?  @unique @map("public_handle") //unique handle for p2p transfers
-  cbCustomerId String?  @unique @map("cb_customer_id")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  phoneNumber  String   @map("phone_number")
+  passwordHash String   @map("password_hash")
+  publicHandle String?  @unique @map("public_handle")
+  cbCustomerId String   @unique @map("cb_customer_id")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   wallet         Wallet?
@@ -37,13 +37,13 @@ model Wallet {
   transactions  Transaction[]
   ledgerEntries LedgerEntry[]
 
-  // for virtual account integration
   accountNumber String?  @map("account_number")
   routingNumber String?  @map("routing_number")
   bankName      String?  @map("bank_name")
   bankAddress   String?  @map("bank_address")
   bankCountry   String?  @map("bank_country")
   bankCurrency  String?  @map("bank_currency")
+  cbVbaId       String?  @map("cb_vba_id")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("wallets")
@@ -71,26 +71,41 @@ model Invoice {
   cbSubscriptionId String?       @map("cb_subscription_id")
   status           InvoiceStatus
   recurring        Boolean       @default(false)
-  description      String?
-  dueAt            DateTime?     @map("due_at") @db.Timestamptz
-  cbInvoiceUrl     String?       @map("cb_invoice_url")
-  cbInvoicePdfUrl  String?       @map("cb_invoice_pdf_url")
-  cbInvoiceNumber  String?       @map("cb_invoice_number")
-  amountCents      BigInt        @map("amount_cents")
-  taxCents         BigInt        @default(0) @map("tax_cents")
-  totalCents       BigInt        @map("total_cents")
-  paidCents        BigInt        @default(0) @map("paid_cents")
-  currency         String        @default("USD")
-  dueDate          DateTime?     @map("due_date") @db.Timestamptz
-  paidAt           DateTime?     @map("paid_at") @db.Timestamptz
-  cbIdempotencyKey String?       @unique @map("cb_idempotency_key") // Chargebee's idempotency key for webhook deduplication
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  date    DateTime  @map("date") @db.Timestamptz
+  dueDate DateTime? @map("due_date") @db.Timestamptz
+
+  subTotalCents        BigInt @map("sub_total_cents")
+  taxCents             BigInt @default(0) @map("tax_cents")
+  totalCents           BigInt @map("total_cents")
+  amountPaidCents      BigInt @default(0) @map("amount_paid_cents")
+  amountDueCents       BigInt @default(0) @map("amount_due_cents")
+  amountAdjustedCents  BigInt @default(0) @map("amount_adjusted_cents")
+  creditsAppliedCents  BigInt @default(0) @map("credits_applied_cents")
+  amountToCollectCents BigInt @default(0) @map("amount_to_collect_cents")
+
+  currency        String    @default("USD")
+  exchangeRate    Float     @default(1.0) @map("exchange_rate")
+  paidAt          DateTime? @map("paid_at") @db.Timestamptz
+  voidedAt        DateTime? @map("voided_at") @db.Timestamptz
+  cbInvoiceUrl    String?   @map("cb_invoice_url")
+  cbInvoicePdfUrl String?   @map("cb_invoice_pdf_url")
+
+  firstInvoice  Boolean @default(false) @map("first_invoice")
+  termFinalized Boolean @default(true) @map("term_finalized")
+  priceType     String  @default("tax_exclusive") @map("price_type")
+
+  cbIdempotencyKey  String?  @unique @map("cb_idempotency_key")
+  cbResourceVersion BigInt?  @map("cb_resource_version")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user         User          @relation(fields: [userId], references: [id])
   subscription Subscription? @relation(fields: [cbSubscriptionId], references: [cbSubscriptionId])
 
   @@index([userId, createdAt])
   @@index([cbSubscriptionId])
+  @@index([status, date])
   @@map("invoices")
 }
 
@@ -109,9 +124,9 @@ model Subscription {
   trialStart        DateTime?          @map("trial_start") @db.Timestamptz
   trialEnd          DateTime?          @map("trial_end") @db.Timestamptz
   activatedAt       DateTime?          @map("activated_at") @db.Timestamptz
-  mrr               BigInt?            @map("mrr") // Monthly Recurring Revenue in cents
+  mrr               BigInt?            @map("mrr")
   currency          String             @default("USD")
-  cbIdempotencyKey  String?            @unique @map("cb_idempotency_key") // Chargebee's idempotency key for webhook deduplication
+  cbIdempotencyKey  String?            @unique @map("cb_idempotency_key")
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -126,6 +141,7 @@ model Subscription {
 
 model Transaction {
   id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
   walletId         String    @map("wallet_id") @db.Uuid
   type             TxnType
   status           TxnStatus @default(PENDING)
